@@ -5,6 +5,7 @@ def build(bld):
     network.source = [
         'model/address.cc',
         'model/application.cc',
+        'model/broadcom-node.cc',
         'model/buffer.cc',
         'model/byte-tag-list.cc',
         'model/channel.cc',
@@ -80,6 +81,7 @@ def build(bld):
     headers.source = [
         'model/address.h',
         'model/application.h',
+        'model/broadcom-node.h',
         'model/buffer.h',
         'model/byte-tag-list.h',
         'model/channel.h',
