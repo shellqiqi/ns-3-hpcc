@@ -175,19 +175,6 @@ protected:
   EventId  m_nextSend;		//< The next send event
   /* State variable for rate-limited queues */
 
-  //qcn
-
-  struct ECNAccount{
-	  Ipv4Address source;
-	  uint32_t qIndex;
-	  uint32_t port;
-	  uint8_t ecnbits;
-	  uint16_t qfb;
-	  uint16_t total;
-  };
-
-  std::vector<ECNAccount> *m_ecn_source;
-
 public:
 	Ptr<RdmaEgressQueue> m_rdmaEQ;
 	void RdmaEnqueueHighPrioQ(Ptr<Packet> p);
