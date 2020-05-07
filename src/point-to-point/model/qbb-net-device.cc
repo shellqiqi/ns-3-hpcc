@@ -70,7 +70,6 @@ namespace ns3 {
 	RdmaEgressQueue::RdmaEgressQueue(){
 		m_rrlast = 0;
 		m_qlast = 0;
-		m_mtu = 1000;
 		m_ackQ = CreateObject<DropTailQueue>();
 		m_ackQ->SetAttribute("MaxBytes", UintegerValue(0xffffffff)); // queue limit is on a higher level, not here
 	}
@@ -83,7 +82,7 @@ namespace ns3 {
 			return p;
 		}
 		if (qIndex >= 0){ // qp
-			Ptr<Packet> p = m_rdmaGetNxtPkt(m_qpGrp->Get(qIndex));
+			Ptr<Packet> p = m_rdmaGetNxtPkt(m_qpGrp->Get(qIndex)); // RdmaHw::GetNxtPacket
 			m_rrlast = qIndex;
 			m_qlast = qIndex;
 			m_traceRdmaDequeue(p, m_qpGrp->Get(qIndex)->m_pg);
@@ -101,7 +100,7 @@ namespace ns3 {
 		uint32_t fcount = m_qpGrp->GetN();
 		for (qIndex = 1; qIndex <= fcount; qIndex++){
 			Ptr<RdmaQueuePair> qp = m_qpGrp->Get((qIndex + m_rrlast) % fcount);
-			if (!paused[qp->m_pg] && qp->GetBytesLeft() > 0 && !qp->IsWinBound()){
+			if (!paused[qp->m_pg] && qp->GetBytesLeft() > 0 && !qp->IsWinBound()){ // pg 为 3 单优先级
 				if (m_qpGrp->Get((qIndex + m_rrlast) % fcount)->m_nextAvail.GetTimeStep() > Simulator::Now().GetTimeStep()) //not available now
 					continue;
 				return (qIndex + m_rrlast) % fcount;
@@ -126,10 +125,11 @@ namespace ns3 {
 	Ptr<RdmaQueuePair> RdmaEgressQueue::GetQp(uint32_t i){
 		return m_qpGrp->Get(i);
 	}
- 
-	void RdmaEgressQueue::RecoverQueue(uint32_t i){
+
+	void RdmaEgressQueue::RecoverQueue(uint32_t i){ // Seems not used
 		NS_ASSERT_MSG(i < m_qpGrp->GetN(), "RdmaEgressQueue::RecoverQueue: qIndex >= m_qpGrp->GetN()");
 		m_qpGrp->Get(i)->snd_nxt = m_qpGrp->Get(i)->snd_una;
+		NS_LOG_UNCOND("we are here!");
 	}
 
 	void RdmaEgressQueue::EnqueueHighPrioQ(Ptr<Packet> p){
@@ -260,7 +260,7 @@ namespace ns3 {
 				TransmitStart(p);
 
 				// update for the next avail time
-				m_rdmaPktSent(lastQp, p, m_tInterframeGap);
+				m_rdmaPktSent(lastQp, p, m_tInterframeGap); // RdmaHw::PktSent
 			}else { // no packet to send
 				NS_LOG_INFO("PAUSE prohibits send at node " << m_node->GetId());
 				Time t = Simulator::GetMaximumSimulationTime();
@@ -276,8 +276,9 @@ namespace ns3 {
 			}
 			return;
 		}else{   //switch, doesn't care about qcn, just send
-			p = m_queue->DequeueRR(m_paused);		//this is round-robin
-			if (p != 0){
+			p = m_queue->DequeueRR(m_paused); //this is round-robin
+			if (p != 0)
+			{
 				m_snifferTrace(p);
 				m_promiscSnifferTrace(p);
 				Ipv4Header h;
@@ -287,13 +288,8 @@ namespace ns3 {
 				packet->RemoveHeader(h);
 				FlowIdTag t;
 				uint32_t qIndex = m_queue->GetLastQueue();
-				if (qIndex == 0){//this is a pause or cnp, send it immediately!
-					m_node->SwitchNotifyDequeue(m_ifIndex, qIndex, p);
-					p->RemovePacketTag(t);
-				}else{
-					m_node->SwitchNotifyDequeue(m_ifIndex, qIndex, p);
-					p->RemovePacketTag(t);
-				}
+				m_node->SwitchNotifyDequeue(m_ifIndex, qIndex, p);
+				p->RemovePacketTag(t);
 				m_traceDequeue(p, qIndex);
 				TransmitStart(p);
 				return;
@@ -438,15 +434,15 @@ namespace ns3 {
 	   return true;
    }
 
-   void QbbNetDevice::NewQp(Ptr<RdmaQueuePair> qp){
-	   qp->m_nextAvail = Simulator::Now();
-	   DequeueAndTransmit();
-   }
-   void QbbNetDevice::ReassignedQp(Ptr<RdmaQueuePair> qp){
-	   DequeueAndTransmit();
+    void QbbNetDevice::NewQp(Ptr<RdmaQueuePair> qp){
+	    qp->m_nextAvail = Simulator::Now();
+	    DequeueAndTransmit();
+    }
+    void QbbNetDevice::ReassignedQp(Ptr<RdmaQueuePair> qp){
+	    DequeueAndTransmit();
    }
    void QbbNetDevice::TriggerTransmit(void){
-	   DequeueAndTransmit();
+	    DequeueAndTransmit();
    }
 
 	void QbbNetDevice::SetQueue(Ptr<BEgressQueue> q){
@@ -462,6 +458,7 @@ namespace ns3 {
 		return m_rdmaEQ;
 	}
 
+	// 用来入队 ACK NACK 等控制报文
 	void QbbNetDevice::RdmaEnqueueHighPrioQ(Ptr<Packet> p){
 		m_traceEnqueue(p, 0);
 		m_rdmaEQ->EnqueueHighPrioQ(p);
@@ -489,6 +486,7 @@ namespace ns3 {
 		m_linkUp = false;
 	}
 
+	// 更新(提前)下一次发送的时间 HPCC 专用
 	void QbbNetDevice::UpdateNextAvail(Time t){
 		if (!m_nextSend.IsExpired() && t < m_nextSend.GetTs()){
 			Simulator::Cancel(m_nextSend);

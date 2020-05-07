@@ -15,8 +15,9 @@ struct RdmaInterfaceMgr{
 	Ptr<RdmaQueuePairGroup> qpGrp;
 
 	RdmaInterfaceMgr() : dev(NULL), qpGrp(NULL) {}
-	RdmaInterfaceMgr(Ptr<QbbNetDevice> _dev){
+	RdmaInterfaceMgr(Ptr<QbbNetDevice> _dev, Ptr<RdmaQueuePairGroup> _qpGrp){
 		dev = _dev;
+		qpGrp = _qpGrp;
 	}
 };
 
@@ -52,7 +53,7 @@ public:
 	uint32_t GetNicIdxOfQp(Ptr<RdmaQueuePair> qp); // get the NIC index of the qp
 	void AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address _sip, Ipv4Address _dip, uint16_t _sport, uint16_t _dport, uint32_t win, uint64_t baseRtt); // add a new qp (new send)
 
-	Ptr<RdmaRxQueuePair> GetRxQp(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint16_t pg, bool create); // get a rxQp
+	Ptr<RdmaRxQueuePair> GetRxQp(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint16_t pg); // get a rxQp
 	uint32_t GetNicIdxOfRxQp(Ptr<RdmaRxQueuePair> q); // get the NIC index of the rxQp
 
 	int ReceiveUdp(Ptr<Packet> p, CustomHeader &ch);

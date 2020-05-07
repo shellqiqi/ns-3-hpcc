@@ -8,6 +8,7 @@
 #include "ns3/double.h"
 #include "ns3/data-rate.h"
 #include "ns3/pointer.h"
+#include "ns3/log.h"
 #include "rdma-hw.h"
 #include "ppp-header.h"
 #include "qbb-header.h"
@@ -179,25 +180,30 @@ RdmaHw::RdmaHw(){
 void RdmaHw::SetNode(Ptr<Node> node){
 	m_node = node;
 }
-void RdmaHw::Setup(QpCompleteCallback cb){
+
+// 设置 RDMA 网卡的发送端流表 注册接收回调 等
+void RdmaHw::Setup(QpCompleteCallback cb){ // called by RdmaDriver::Init
 	for (uint32_t i = 0; i < m_nic.size(); i++){
 		Ptr<QbbNetDevice> dev = m_nic[i].dev;
 		if (dev == NULL)
 			continue;
 		// share data with NIC
+		// 用于存放发送相关的所有 queue pair
+		// 此步骤仅关联相关对象 仍未有 queue pair 在内
 		dev->m_rdmaEQ->m_qpGrp = m_nic[i].qpGrp;
 		// setup callback
-		dev->m_rdmaReceiveCb = MakeCallback(&RdmaHw::Receive, this);
+		dev->m_rdmaReceiveCb = MakeCallback(&RdmaHw::Receive, this); // 用于处理接收
 		dev->m_rdmaLinkDownCb = MakeCallback(&RdmaHw::SetLinkDown, this);
-		dev->m_rdmaPktSent = MakeCallback(&RdmaHw::PktSent, this);
+		dev->m_rdmaPktSent = MakeCallback(&RdmaHw::PktSent, this); // 发送后的更新
 		// config NIC
-		dev->m_rdmaEQ->m_mtu = m_mtu;
-		dev->m_rdmaEQ->m_rdmaGetNxtPkt = MakeCallback(&RdmaHw::GetNxtPacket, this);
+		dev->m_rdmaEQ->m_rdmaGetNxtPkt = MakeCallback(&RdmaHw::GetNxtPacket, this); // 用于处理发送
 	}
 	// setup qp complete callback
 	m_qpCompleteCallback = cb;
 }
 
+// 对 QP 做 ECMP 选路
+// 返回网卡
 uint32_t RdmaHw::GetNicIdxOfQp(Ptr<RdmaQueuePair> qp){
 	auto &v = m_rtTable[qp->dip.Get()];
 	if (v.size() > 0){
@@ -206,9 +212,15 @@ uint32_t RdmaHw::GetNicIdxOfQp(Ptr<RdmaQueuePair> qp){
 		NS_ASSERT_MSG(false, "We assume at least one NIC is alive");
 	}
 }
+
+// QP Key 用于 QP 哈希表
+// 返回值为源端口和 pg 的组合
+// pg 恒为 3
 uint64_t RdmaHw::GetQpKey(uint16_t sport, uint16_t pg){
 	return ((uint64_t)sport << 16) | (uint64_t)pg;
 }
+
+// 通过 QP Key 对 QP 的查找
 Ptr<RdmaQueuePair> RdmaHw::GetQp(uint16_t sport, uint16_t pg){
 	uint64_t key = GetQpKey(sport, pg);
 	auto it = m_qpMap.find(key);
@@ -216,6 +228,8 @@ Ptr<RdmaQueuePair> RdmaHw::GetQp(uint16_t sport, uint16_t pg){
 		return it->second;
 	return NULL;
 }
+
+// 添加 QP
 void RdmaHw::AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Address dip, uint16_t sport, uint16_t dport, uint32_t win, uint64_t baseRtt){
 	// create qp
 	Ptr<RdmaQueuePair> qp = CreateObject<RdmaQueuePair>(pg, sip, dip, sport, dport);
@@ -250,12 +264,12 @@ void RdmaHw::AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Addre
 	m_nic[nic_idx].dev->NewQp(qp);
 }
 
-Ptr<RdmaRxQueuePair> RdmaHw::GetRxQp(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint16_t pg, bool create){
+Ptr<RdmaRxQueuePair> RdmaHw::GetRxQp(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint16_t pg){
 	uint64_t key = ((uint64_t)dip << 32) | ((uint64_t)pg << 16) | (uint64_t)dport;
 	auto it = m_rxQpMap.find(key);
-	if (it != m_rxQpMap.end())
+	if (it != m_rxQpMap.end()) // Found in rx qp table
 		return it->second;
-	if (create){
+	else { // Not found
 		// create new rx qp
 		Ptr<RdmaRxQueuePair> q = CreateObject<RdmaRxQueuePair>();
 		// init the qp
@@ -263,13 +277,12 @@ Ptr<RdmaRxQueuePair> RdmaHw::GetRxQp(uint32_t sip, uint32_t dip, uint16_t sport,
 		q->dip = dip;
 		q->sport = sport;
 		q->dport = dport;
-		q->m_ecn_source.qIndex = pg;
 		// store in map
 		m_rxQpMap[key] = q;
 		return q;
 	}
-	return NULL;
 }
+
 uint32_t RdmaHw::GetNicIdxOfRxQp(Ptr<RdmaRxQueuePair> q){
 	auto &v = m_rtTable[q->dip];
 	if (v.size() > 0){
@@ -279,22 +292,17 @@ uint32_t RdmaHw::GetNicIdxOfRxQp(Ptr<RdmaRxQueuePair> q){
 	}
 }
 
+// 接收到数据包
 int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch){
 	uint8_t ecnbits = ch.GetIpv4EcnBits();
 
 	uint32_t payload_size = p->GetSize() - ch.GetSerializedSize();
 
-	// TODO find corresponding rx queue pair
-	Ptr<RdmaRxQueuePair> rxQp = GetRxQp(ch.dip, ch.sip, ch.udp.dport, ch.udp.sport, ch.udp.pg, true);
-	if (ecnbits != 0){
-		rxQp->m_ecn_source.ecnbits |= ecnbits;
-		rxQp->m_ecn_source.qfb++;
-	}
-	rxQp->m_ecn_source.total++;
+	Ptr<RdmaRxQueuePair> rxQp = GetRxQp(ch.dip, ch.sip, ch.udp.dport, ch.udp.sport, ch.udp.pg);
 	rxQp->m_milestone_rx = m_ack_interval;
 
 	int x = ReceiverCheckSeq(ch.udp.seq, rxQp, payload_size);
-	if (x == 1 || x == 2){ //generate ACK or NACK
+	if (x == 1 || x == 2){ //generate 1 ACK or 2 NACK
 		qbbHeader seqh;
 		seqh.SetSeq(rxQp->ReceiverNextExpectedSeq);
 		seqh.SetPG(ch.udp.pg);
@@ -325,7 +333,8 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch){
 	return 0;
 }
 
-int RdmaHw::ReceiveCnp(Ptr<Packet> p, CustomHeader &ch){
+int RdmaHw::ReceiveCnp(Ptr<Packet> p, CustomHeader &ch){ // seemd not used
+	NS_LOG_UNCOND("Receive CNP");
 	// QCN on NIC
 	// This is a Congestion signal
 	// Then, extract data from the congestion packet.
@@ -419,7 +428,7 @@ int RdmaHw::ReceiveAck(Ptr<Packet> p, CustomHeader &ch){
 int RdmaHw::Receive(Ptr<Packet> p, CustomHeader &ch){
 	if (ch.l3Prot == 0x11){ // UDP
 		ReceiveUdp(p, ch);
-	}else if (ch.l3Prot == 0xFF){ // CNP
+	}else if (ch.l3Prot == 0xFF){ // CNP Seems not used
 		ReceiveCnp(p, ch);
 	}else if (ch.l3Prot == 0xFD){ // NACK
 		ReceiveAck(p, ch);
@@ -435,9 +444,9 @@ int RdmaHw::ReceiverCheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t size
 		q->ReceiverNextExpectedSeq = expected + size;
 		if (q->ReceiverNextExpectedSeq >= q->m_milestone_rx){
 			q->m_milestone_rx += m_ack_interval;
-			return 1; //Generate ACK
+			return 1; // ACK
 		}else if (q->ReceiverNextExpectedSeq % m_chunk == 0){
-			return 1;
+			return 1; // ACK
 		}else {
 			return 5;
 		}
@@ -446,7 +455,7 @@ int RdmaHw::ReceiverCheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t size
 		if (Simulator::Now() >= q->m_nackTimer || q->m_lastNACK != expected){
 			q->m_nackTimer = Simulator::Now() + MicroSeconds(m_nack_interval);
 			q->m_lastNACK = expected;
-			if (m_backto0){
+			if (m_backto0){ // 以 chunk 为单位置 0
 				q->ReceiverNextExpectedSeq = q->ReceiverNextExpectedSeq / m_chunk*m_chunk;
 			}
 			return 2;
@@ -457,11 +466,13 @@ int RdmaHw::ReceiverCheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t size
 		return 3;
 	}
 }
+
 void RdmaHw::AddHeader (Ptr<Packet> p, uint16_t protocolNumber){
 	PppHeader ppp;
 	ppp.SetProtocol (EtherToPpp (protocolNumber));
 	p->AddHeader (ppp);
 }
+
 uint16_t RdmaHw::EtherToPpp (uint16_t proto){
 	switch(proto){
 		case 0x0800: return 0x0021;   //IPv4
@@ -498,7 +509,7 @@ void RdmaHw::ClearTable(){
 	m_rtTable.clear();
 }
 
-void RdmaHw::RedistributeQp(){
+void RdmaHw::RedistributeQp(){ // 链路中断时使用
 	// clear old qpGrp
 	for (uint32_t i = 0; i < m_nic.size(); i++){
 		if (m_nic[i].dev == NULL)
@@ -516,6 +527,7 @@ void RdmaHw::RedistributeQp(){
 	}
 }
 
+// 用来构造 queue pair 出队报文
 Ptr<Packet> RdmaHw::GetNxtPacket(Ptr<RdmaQueuePair> qp){
 	uint32_t payload_size = qp->GetBytesLeft();
 	if (m_mtu < payload_size)

@@ -20,7 +20,7 @@ public:
 	uint64_t m_size;
 	uint64_t snd_nxt, snd_una; // next seq to send, the highest unacked seq
 	uint16_t m_pg;
-	uint16_t m_ipid;
+	uint16_t m_ipid; // id 不过没有逻辑上的使用
 	uint32_t m_win; // bound of on-the-fly packets
 	uint64_t m_baseRtt; // base RTT of this qp
 	DataRate m_max_rate; // max rate
@@ -96,18 +96,9 @@ public:
 
 class RdmaRxQueuePair : public Object { // Rx side queue pair
 public:
-	struct ECNAccount{
-		uint16_t qIndex;
-		uint8_t ecnbits;
-		uint16_t qfb;
-		uint16_t total;
-
-		ECNAccount() { memset(this, 0, sizeof(ECNAccount));}
-	};
-	ECNAccount m_ecn_source;
 	uint32_t sip, dip;
 	uint16_t sport, dport;
-	uint16_t m_ipid;
+	uint16_t m_ipid; // id 不过没有逻辑上的使用
 	uint32_t ReceiverNextExpectedSeq;
 	Time m_nackTimer;
 	int32_t m_milestone_rx;

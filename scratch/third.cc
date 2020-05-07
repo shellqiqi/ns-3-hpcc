@@ -811,7 +811,7 @@ int main(int argc, char *argv[])
 			rdma->SetNode(node);
 			rdma->SetRdmaHw(rdmaHw);
 
-			node->AggregateObject (rdma);
+			node->AggregateObject (rdma); // For GetObject in both RdmaDriver and Node
 			rdma->Init();
 			rdma->TraceConnectWithoutContext("QpComplete", MakeBoundCallback (qp_finish, fct_output));
 		}
@@ -897,11 +897,7 @@ int main(int argc, char *argv[])
 		sim_setting.Serialize(trace_output);
 	}
 
-	Ipv4GlobalRoutingHelper::PopulateRoutingTables();
-
 	NS_LOG_INFO("Create Applications.");
-
-	Time interPacketInterval = Seconds(0.0000005 / 2);
 
 	// maintain port number for each host
 	std::unordered_map<uint32_t, uint16_t> portNumder;
@@ -912,7 +908,7 @@ int main(int argc, char *argv[])
 
 	for (uint32_t i = 0; i < flow_num; i++)
 	{
-		uint32_t src, dst, pg, maxPacketCount, port, dport;
+		uint32_t src, dst, pg, maxPacketCount, port, dport; // pg is useless
 		double start_time, stop_time;
 		flowf >> src >> dst >> pg >> dport >> maxPacketCount >> start_time;
 		NS_ASSERT(n.Get(src)->GetNodeType() == 0 && n.Get(dst)->GetNodeType() == 0);

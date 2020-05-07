@@ -40,7 +40,6 @@ class RdmaEgressQueue : public Object{
 public:
 	static const uint32_t qCnt = 8;
 	static uint32_t ack_q_idx;
-	uint32_t m_mtu;
 	int m_qlast;
 	uint32_t m_rrlast;
 	Ptr<DropTailQueue> m_ackQ; // highest priority queue
@@ -48,7 +47,7 @@ public:
 
 	// callback for get next packet
 	typedef Callback<Ptr<Packet>, Ptr<RdmaQueuePair> > RdmaGetNxtPkt;
-	RdmaGetNxtPkt m_rdmaGetNxtPkt;
+	RdmaGetNxtPkt m_rdmaGetNxtPkt; // RdmaHw::GetNxtPacket
 
 	static TypeId GetTypeId (void);
 	RdmaEgressQueue();
@@ -181,17 +180,17 @@ public:
 
 	// callback for processing packet in RDMA
 	typedef Callback<int, Ptr<Packet>, CustomHeader&> RdmaReceiveCb;
-	RdmaReceiveCb m_rdmaReceiveCb;
+	RdmaReceiveCb m_rdmaReceiveCb; // 接收回调 RdmaHw::Receive
 	// callback for link down
 	typedef Callback<void, Ptr<QbbNetDevice> > RdmaLinkDownCb;
-	RdmaLinkDownCb m_rdmaLinkDownCb;
+	RdmaLinkDownCb m_rdmaLinkDownCb; // 链路中断后的更新 RdmaHw::SetLinkDown
 	// callback for sent a packet
 	typedef Callback<void, Ptr<RdmaQueuePair>, Ptr<Packet>, Time> RdmaPktSent;
-	RdmaPktSent m_rdmaPktSent;
+	RdmaPktSent m_rdmaPktSent; // 发送后的更新 RdmaHw::PktSent
 
 	Ptr<RdmaEgressQueue> GetRdmaQueue();
 	void TakeDown(); // take down this device
-	void UpdateNextAvail(Time t);
+	void UpdateNextAvail(Time t); // HPCC only
 
 	TracedCallback<Ptr<const Packet>, Ptr<RdmaQueuePair> > m_traceQpDequeue; // the trace for printing dequeue
 };
