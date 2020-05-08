@@ -160,9 +160,9 @@ void monitor_buffer(FILE* qlen_output, NodeContainer *n){
 void monitor_mmu(std::stringstream *mmu_mon_ss, Ptr<Node> n, uint32_t itv_ns, uint32_t itv_end_ns) {
 	if (n->GetNodeType() == 1){ // is switch
 		Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(n);
-		for (uint32_t port = 1; port < 5; port++) { // port 1 to 4
+		for (uint32_t port = 1; port <= 2; port++) { // port 1 to 2
 			(*mmu_mon_ss) <<
-			Simulator::Now() << '\t'
+			Simulator::Now().GetNanoSeconds() << '\t'
 			<< port << '\t'
 			<< sw->m_rxBytes[port] << '\t'
 			<< sw->m_mmu->paused[port][3] << '\t'
@@ -178,7 +178,7 @@ void monitor_node(std::stringstream *node_mon_ss, Ptr<Node> n, uint32_t itv_ns, 
 	if (n->GetNodeType() == 0){ // is node
 		for (uint32_t port = 0; port < 1; port++) { // port 0
 			(*node_mon_ss) <<
-			Simulator::Now() << '\t'
+			Simulator::Now().GetNanoSeconds() << '\t'
 			<< port << '\t'
 			<< n->GetObject<RdmaDriver>()->m_rdma->cnp_cnt << '\n';
 		}
