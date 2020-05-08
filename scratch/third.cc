@@ -157,6 +157,36 @@ void monitor_buffer(FILE* qlen_output, NodeContainer *n){
 		Simulator::Schedule(NanoSeconds(qlen_mon_interval), &monitor_buffer, qlen_output, n);
 }
 
+void monitor_mmu(std::stringstream *mmu_mon_ss, Ptr<Node> n, uint32_t itv_ns, uint32_t itv_end_ns) {
+	if (n->GetNodeType() == 1){ // is switch
+		Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(n);
+		for (uint32_t port = 1; port < 5; port++) { // port 1 to 4
+			(*mmu_mon_ss) <<
+			Simulator::Now() << '\t'
+			<< port << '\t'
+			<< sw->m_rxBytes[port] << '\t'
+			<< sw->m_mmu->paused[port][3] << '\t'
+			<< sw->m_mmu->GetSharedUsed(port) << '\t'
+			<< sw->m_mmu->GetPfcThreshold(port) << '\n';
+		}
+	}
+	if (Simulator::Now().GetNanoSeconds() < itv_end_ns)
+		Simulator::Schedule(NanoSeconds(itv_ns), &monitor_mmu, mmu_mon_ss, n, itv_ns, itv_end_ns);
+}
+
+void monitor_node(std::stringstream *node_mon_ss, Ptr<Node> n, uint32_t itv_ns, uint32_t itv_end_ns) {
+	if (n->GetNodeType() == 0){ // is node
+		for (uint32_t port = 0; port < 1; port++) { // port 0
+			(*node_mon_ss) <<
+			Simulator::Now() << '\t'
+			<< port << '\t'
+			<< n->GetObject<RdmaDriver>()->m_rdma->cnp_cnt << '\n';
+		}
+	}
+	if (Simulator::Now().GetNanoSeconds() < itv_end_ns)
+		Simulator::Schedule(NanoSeconds(itv_ns), &monitor_node, node_mon_ss, n, itv_ns, itv_end_ns);
+}
+
 void CalculateRoute(Ptr<Node> host){
 	// queue for the BFS.
 	vector<Ptr<Node> > q;
@@ -776,6 +806,7 @@ int main(int argc, char *argv[])
 
 	#if ENABLE_QP
 	FILE *fct_output = fopen(fct_output_file.c_str(), "w");
+	fprintf(fct_output, "sip dip sprt dprt size strt time\n");
 	//
 	// install RDMA driver
 	//
@@ -785,9 +816,9 @@ int main(int argc, char *argv[])
 			Ptr<RdmaHw> rdmaHw = CreateObject<RdmaHw>();
 			rdmaHw->SetAttribute("ClampTargetRate", BooleanValue(clamp_target_rate));
 			rdmaHw->SetAttribute("AlphaResumInterval", DoubleValue(alpha_resume_interval));
-			rdmaHw->SetAttribute("RPTimer", DoubleValue(rp_timer));
+			rdmaHw->SetAttribute("RPTimer", DoubleValue(rp_timer)); // rate increase
 			rdmaHw->SetAttribute("FastRecoveryTimes", UintegerValue(fast_recovery_times));
-			rdmaHw->SetAttribute("EwmaGain", DoubleValue(ewma_gain));
+			rdmaHw->SetAttribute("EwmaGain", DoubleValue(ewma_gain)); // g
 			rdmaHw->SetAttribute("RateAI", DataRateValue(DataRate(rate_ai)));
 			rdmaHw->SetAttribute("RateHAI", DataRateValue(DataRate(rate_hai)));
 			rdmaHw->SetAttribute("L2BackToZero", BooleanValue(l2_back_to_zero));
@@ -933,6 +964,21 @@ int main(int argc, char *argv[])
 	FILE* qlen_output = fopen(qlen_mon_file.c_str(), "w");
 	Simulator::Schedule(NanoSeconds(qlen_mon_start), &monitor_buffer, qlen_output, &n);
 
+	// schedule mmu monitor
+	FILE* mmu_output = fopen("mix/mmu0.log", "w");
+	std::stringstream mmu_mon_ss;
+	mmu_mon_ss << "time\tport\trxbyte\tpause\tshared\tpfcth\n";
+	uint32_t itv_ns       =      10000;
+	uint32_t itv_start_ns = 2000000000;
+	uint32_t itv_end_ns   = 2001800000;
+	Simulator::Schedule(NanoSeconds(itv_start_ns), &monitor_mmu, &mmu_mon_ss, n.Get(0), itv_ns, itv_end_ns);
+
+	// schedule node monitor
+	FILE* node_output = fopen("mix/node2.log", "w");
+	std::stringstream node_mon_ss;
+	node_mon_ss << "time\tport\tcnpcnt\n";
+	Simulator::Schedule(NanoSeconds(itv_start_ns), &monitor_node, &node_mon_ss, n.Get(2), itv_ns, itv_end_ns);
+
 	//
 	// Now, do the actual simulation.
 	//
@@ -944,6 +990,11 @@ int main(int argc, char *argv[])
 	Simulator::Destroy();
 	NS_LOG_INFO("Done.");
 	fclose(trace_output);
+
+	fprintf(mmu_output, "%s", mmu_mon_ss.str().c_str());
+	fflush(mmu_output);
+	fprintf(node_output, "%s", node_mon_ss.str().c_str());
+	fflush(node_output);
 
 	endt = clock();
 	std::cout << (double)(endt - begint) / CLOCKS_PER_SEC << "\n";

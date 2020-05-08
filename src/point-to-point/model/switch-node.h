@@ -11,6 +11,7 @@ namespace ns3 {
 class Packet;
 
 class SwitchNode : public Node{
+public:
 	static const uint32_t pCnt = 257;	// Number of ports used
 	static const uint32_t qCnt = 8;	// Number of queues/priorities used
 	uint32_t m_ecmpSeed;
@@ -18,9 +19,10 @@ class SwitchNode : public Node{
 
 	// monitor of PFC
 	uint32_t m_bytes[pCnt][pCnt][qCnt]; // m_bytes[inDev][outDev][qidx] is the bytes from inDev enqueued for outDev at qidx
-	
+
 	uint64_t m_txBytes[pCnt]; // counter of tx bytes
 
+	uint64_t m_rxBytes[pCnt]; // counter of rx bytes
 protected:
 	bool m_ecnEnabled;
 	uint32_t m_ccMode;

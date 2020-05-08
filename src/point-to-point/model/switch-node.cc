@@ -45,8 +45,10 @@ SwitchNode::SwitchNode(){
 		for (uint32_t j = 0; j < pCnt; j++)
 			for (uint32_t k = 0; k < qCnt; k++)
 				m_bytes[i][j][k] = 0;
-	for (uint32_t i = 0; i < pCnt; i++)
+	for (uint32_t i = 0; i < pCnt; i++) {
 		m_txBytes[i] = 0;
+		m_rxBytes[i] = 0;
+	}
 }
 
 int SwitchNode::GetOutDev(Ptr<const Packet> p, CustomHeader &ch){
@@ -177,6 +179,10 @@ void SwitchNode::ClearTable(){
 
 // This function can only be called in switch mode
 bool SwitchNode::SwitchReceiveFromDevice(Ptr<NetDevice> device, Ptr<Packet> packet, CustomHeader &ch){
+	FlowIdTag t;
+	packet->PeekPacketTag(t);
+	uint32_t inDev = t.GetFlowId();
+	m_rxBytes[inDev] += packet->GetSize();
 	SendToDev(packet, ch);
 	return true;
 }
@@ -184,8 +190,8 @@ bool SwitchNode::SwitchReceiveFromDevice(Ptr<NetDevice> device, Ptr<Packet> pack
 void SwitchNode::SwitchNotifyDequeue(uint32_t ifIndex, uint32_t qIndex, Ptr<Packet> p){
 	FlowIdTag t;
 	p->PeekPacketTag(t);
+	uint32_t inDev = t.GetFlowId();
 	if (qIndex != 0){
-		uint32_t inDev = t.GetFlowId();
 		m_mmu->RemoveFromIngressAdmission(inDev, qIndex, p->GetSize());
 		m_mmu->RemoveFromEgressAdmission(ifIndex, qIndex, p->GetSize());
 		m_bytes[inDev][ifIndex][qIndex] -= p->GetSize();

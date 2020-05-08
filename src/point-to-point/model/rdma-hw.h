@@ -46,6 +46,9 @@ public:
 	typedef Callback<void, Ptr<RdmaQueuePair> > QpCompleteCallback;
 	QpCompleteCallback m_qpCompleteCallback;
 
+	// statistic
+	uint32_t cnp_cnt = 0;
+
 	void SetNode(Ptr<Node> node);
 	void Setup(QpCompleteCallback cb); // setup shared data and callbacks with the QbbNetDevice
 	static uint64_t GetQpKey(uint16_t sport, uint16_t pg); // get the lookup key for m_qpMap

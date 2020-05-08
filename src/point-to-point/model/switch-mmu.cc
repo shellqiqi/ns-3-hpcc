@@ -97,6 +97,18 @@ namespace ns3 {
 		uint32_t used = ingress_bytes[port][qIndex];
 		return used > reserve ? used - reserve : 0;
 	}
+	uint32_t SwitchMmu::GetSharedUsed(uint32_t port){
+		uint32_t sum = 0;
+		for (uint i = 0; i < qCnt; i++)
+			sum += GetSharedUsed(port, i);
+		return sum;
+	}
+	uint32_t SwitchMmu::GetSharedUsed(){
+		uint32_t sum = 0;
+		for (uint i = 0; i < pCnt; i++)
+			sum += GetSharedUsed(i);
+		return sum;
+	}
 	bool SwitchMmu::ShouldSendCN(uint32_t ifindex, uint32_t qIndex){
 		if (qIndex == 0)
 			return false;

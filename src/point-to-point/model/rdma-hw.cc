@@ -410,7 +410,7 @@ int RdmaHw::ReceiveAck(Ptr<Packet> p, CustomHeader &ch){
 	if (cnp){
 		if (m_cc_mode == 1){ // mlx version
 			cnp_received_mlx(qp);
-		} 
+		} cnp_cnt++;
 	}
 
 	if (m_cc_mode == 3){

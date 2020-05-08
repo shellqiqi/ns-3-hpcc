@@ -33,6 +33,8 @@ public:
 
 	uint32_t GetPfcThreshold(uint32_t port);
 	uint32_t GetSharedUsed(uint32_t port, uint32_t qIndex);
+	uint32_t GetSharedUsed(uint32_t port);
+	uint32_t GetSharedUsed();
 
 	bool ShouldSendCN(uint32_t ifindex, uint32_t qIndex);
 
