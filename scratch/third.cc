@@ -113,7 +113,7 @@ void qp_finish(FILE* fout, Ptr<RdmaQueuePair> q){
 }
 
 void get_pfc(FILE* fout, Ptr<QbbNetDevice> dev, uint32_t type){
-	fprintf(fout, "%lu %u %u %u %u\n", Simulator::Now().GetTimeStep(), dev->GetNode()->GetId(), dev->GetNode()->GetNodeType(), dev->GetIfIndex(), type);
+	fprintf(fout, "%lu\t%u\t%u\t%u\t%u\n", Simulator::Now().GetTimeStep(), dev->GetNode()->GetId(), dev->GetNode()->GetNodeType(), dev->GetIfIndex(), type);
 }
 
 struct QlenDistribution{
@@ -157,21 +157,19 @@ void monitor_buffer(FILE* qlen_output, NodeContainer *n){
 		Simulator::Schedule(NanoSeconds(qlen_mon_interval), &monitor_buffer, qlen_output, n);
 }
 
-void monitor_mmu(std::stringstream *mmu_mon_ss, Ptr<Node> n, uint32_t itv_ns, uint32_t itv_end_ns) {
+void monitor_mmu(std::stringstream *mmu_mon_ss, Ptr<Node> n, uint32_t port, uint32_t itv_ns, uint32_t itv_end_ns) {
 	if (n->GetNodeType() == 1){ // is switch
 		Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(n);
-		for (uint32_t port = 1; port <= 2; port++) { // port 1 to 2
-			(*mmu_mon_ss) <<
-			Simulator::Now().GetNanoSeconds() << '\t'
-			<< port << '\t'
-			<< sw->m_rxBytes[port] << '\t'
-			<< sw->m_mmu->paused[port][3] << '\t'
-			<< sw->m_mmu->GetSharedUsed(port) << '\t'
-			<< sw->m_mmu->GetPfcThreshold(port) << '\n';
-		}
+		(*mmu_mon_ss) <<
+		Simulator::Now().GetNanoSeconds() << '\t'
+		<< port << '\t'
+		<< sw->m_rxBytes[port] << '\t'
+		<< sw->m_mmu->paused[port][3] << '\t'
+		<< sw->m_mmu->GetSharedUsed(port) << '\t'
+		<< sw->m_mmu->GetPfcThreshold(port) << '\n';
 	}
 	if (Simulator::Now().GetNanoSeconds() < itv_end_ns)
-		Simulator::Schedule(NanoSeconds(itv_ns), &monitor_mmu, mmu_mon_ss, n, itv_ns, itv_end_ns);
+		Simulator::Schedule(NanoSeconds(itv_ns), &monitor_mmu, mmu_mon_ss, n, port, itv_ns, itv_end_ns);
 }
 
 void monitor_node(std::stringstream *node_mon_ss, Ptr<Node> n, uint32_t itv_ns, uint32_t itv_end_ns) {
@@ -702,6 +700,7 @@ int main(int argc, char *argv[])
 	rem->SetAttribute("ErrorUnit", StringValue("ERROR_UNIT_PACKET"));
 
 	FILE *pfc_file = fopen(pfc_output_file.c_str(), "w");
+	fprintf(pfc_file, "%s", "time\tnode\tnode type\tinf\ttype\n");
 
 	QbbHelper qbb;
 	Ipv4AddressHelper ipv4;
@@ -971,7 +970,7 @@ int main(int argc, char *argv[])
 	uint32_t itv_ns       =      10000;
 	uint32_t itv_start_ns = 2000000000;
 	uint32_t itv_end_ns   = 2001800000;
-	Simulator::Schedule(NanoSeconds(itv_start_ns), &monitor_mmu, &mmu_mon_ss, n.Get(0), itv_ns, itv_end_ns);
+	Simulator::Schedule(NanoSeconds(itv_start_ns), &monitor_mmu, &mmu_mon_ss, n.Get(0), 1, itv_ns, itv_end_ns);
 
 	// schedule node monitor
 	FILE* node_output = fopen("mix/node2.log", "w");
